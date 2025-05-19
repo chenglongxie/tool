@@ -16,10 +16,16 @@ import (
 	"strings"
 	"time"
 
+	"embed"
+
 	"github.com/gorilla/mux"
-	_ "modernc.org/sqlite"
 	"gopkg.in/yaml.v2"
+	_ "modernc.org/sqlite" // SQLite数据库驱动
 )
+
+// embed 静态文件
+//go:embed static
+var staticFiles embed.FS
 
 type Config struct {
 	HostIP string `yaml:"host_ip"`
@@ -226,17 +232,30 @@ func CheckFilesPeriodically(db *sql.DB) {
 
 // API handlers
 func SetupRoutes(router *mux.Router, db *sql.DB) {
-	router.HandleFunc("/files", func(w http.ResponseWriter, r *http.Request) {
+	subrouter := router.PathPrefix("/file_integrity").Subrouter()
+
+	subrouter.HandleFunc("/files", func(w http.ResponseWriter, r *http.Request) {
 		AddFileToWatch(w, r, db)
 	}).Methods("POST")
 
-	router.HandleFunc("/files/{id}", func(w http.ResponseWriter, r *http.Request) {
+	subrouter.HandleFunc("/files/{id}", func(w http.ResponseWriter, r *http.Request) {
 		DeleteFileRecordHandler(w, r, db)
 	}).Methods("DELETE")
 
-	router.HandleFunc("/files", func(w http.ResponseWriter, r *http.Request) {
+	subrouter.HandleFunc("/files", func(w http.ResponseWriter, r *http.Request) {
 		ListAllFiles(w, r, db)
 	}).Methods("GET")
+
+	// Serve static files
+	fs := http.FileServer(http.FS(staticFiles))
+
+	// Handle root path for /file_integrity
+	subrouter.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "static/index.html")
+	})
+
+	// Serve other static files
+	subrouter.PathPrefix("/").Handler(http.StripPrefix("/file_integrity/", fs))
 }
 
 func AddFileToWatch(w http.ResponseWriter, r *http.Request, db *sql.DB) {

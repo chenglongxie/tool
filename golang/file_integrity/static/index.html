@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件监控管理系统</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+        .container {
+            max-width: 100%;
+            margin: auto;
+            padding: 20px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+        }
+        h1 {
+            text-align: center;
+            color: #555;
+        }
+        form {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        label {
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        input[type="text"] {
+            padding: 10px;
+            width: 300px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 5px;
+        }
+        .delete-button {
+            background-color: #dc3545;
+            border: none;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        .delete-button:hover {
+            background-color: #c82333;
+        }
+        @media (max-width: 768px) {
+            th:not(:first-child):not(:nth-child(2)):not(:nth-last-child(-n+2)),
+            td:not(:first-child):not(:nth-child(2)):not(:nth-last-child(-n+2)) {
+                display: none; /* 隐藏非关键列在小屏幕上 */
+            }
+            th:first-child, td:first-child,
+            th:nth-child(2), td:nth-child(2),
+            th:nth-last-child(-n+2), td:nth-last-child(-n+2) {
+                min-width: 100%; /* 占据整行 */
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>文件监控管理系统</h1>
+
+        <!-- 添加文件表单 -->
+        <form id="addFileForm">
+            <label for="filePath">文件路径:</label>
+            <input type="text" id="filePath" name="filePath" required>
+            <button type="submit">添加文件</button>
+        </form>
+
+        <!-- 文件列表 -->
+        <table id="fileTable">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>主机IP</th>
+                    <th>文件名</th>
+                    <th>文件路径</th>
+                    <th>更新时间</th>
+                    <th>原始MD5</th>
+                    <th>当前MD5</th>
+                    <th>扫描时间</th>
+                    <th>文件是否存在</th>
+                    <th>文件是否变化</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- 文件记录将动态插入到这里 -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        const apiUrl = '/file_integrity/';
+
+        document.getElementById('addFileForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const filePath = document.getElementById('filePath').value;
+
+            try {
+                const response = await fetch(`${apiUrl}files`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ file_path: filePath })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                alert('文件添加成功');
+                loadFiles();
+            } catch (error) {
+                alert('文件添加失败: ' + error.message);
+            }
+        });
+
+        async function deleteFile(id) {
+            try {
+                const response = await fetch(`${apiUrl}files/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                alert(data.message);
+                loadFiles();
+            } catch (error) {
+                alert('文件记录删除失败: ' + error.message);
+            }
+        }
+
+        async function loadFiles() {
+            try {
+                const response = await fetch(`${apiUrl}files`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const responseData = await response.json();
+                const files = responseData.data;
+                const tbody = document.querySelector('#fileTable tbody');
+                tbody.innerHTML = '';
+
+                files.forEach(file => {
+                    const row = document.createElement('tr');
+
+                    // Reorder columns to place file path first
+                    const values = [
+                        file.id,
+                        file.host_ip,
+                        file.file_name,
+                        file.file_path,
+                        file.last_update,
+                        file.original_md5,
+                        file.latest_md5,
+                        file.scan_time,
+                        !file.is_deleted ? '是' : '否',
+                        file.original_md5 === file.latest_md5 ? '否' : '是'
+                    ];
+
+                    values.forEach(value => {
+                        const cell = document.createElement('td');
+                        cell.textContent = value.toString();
+                        row.appendChild(cell);
+                    });
+
+                    // 添加删除按钮
+                    const actionCell = document.createElement('td');
+                    const deleteButton = document.createElement('button');
+                    deleteButton.className = 'delete-button';
+                    deleteButton.textContent = '删除';
+                    deleteButton.onclick = () => deleteFile(file.id);
+                    actionCell.appendChild(deleteButton);
+                    row.appendChild(actionCell);
+
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                console.error('加载文件列表失败:', error);
+            }
+        }
+
+        // 加载初始文件列表
+        window.onload = loadFiles;
+    </script>
+</body>
+</html>
+
+
+
