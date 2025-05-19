@@ -3,7 +3,6 @@ module chenglongxie/file_integrity
 go 1.24.2
 
 require (
-	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gorilla/mux v1.8.1
 	gopkg.in/yaml.v2 v2.4.0
 	modernc.org/sqlite v1.37.0

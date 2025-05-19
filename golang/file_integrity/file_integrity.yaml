@@ -3,3 +3,4 @@ server:
   port: 8080
 database:
   path: "./file_integrity.db"
+check_interval: 30
