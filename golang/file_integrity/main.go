@@ -13,11 +13,12 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
-	"gopkg.in/yaml.v2"
 	_ "modernc.org/sqlite"
+	"gopkg.in/yaml.v2"
 )
 
 type Config struct {
@@ -48,16 +49,34 @@ func GetConfig() *Config {
 	return &cfg
 }
 
+// 自定义时间格式
+type CustomTime time.Time
+
+func (ct CustomTime) MarshalJSON() ([]byte, error) {
+	t := time.Time(ct)
+	return json.Marshal(t.Format("2006-01-02 15:04:05"))
+}
+
+func (ct *CustomTime) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), `"`)
+	t, err := time.Parse("2006-01-02 15:04:05", s)
+	if err != nil {
+		return err
+	}
+	*ct = CustomTime(t)
+	return nil
+}
+
 type FileRecord struct {
-	ID           int       `json:"id"`
-	HostIP       string    `json:"host_ip"`
-	FileName     string    `json:"file_name"`
-	Filepath     string    `json:"file_path"`
-	LastUpdate   time.Time `json:"last_update"`
-	OriginalMD5  string    `json:"original_md5"`
-	LatestMD5    string    `json:"latest_md5"`
-	ScanTime     time.Time `json:"scan_time"`
-	IsDeleted    bool      `json:"is_deleted"`
+	ID           int         `json:"id"`
+	HostIP       string      `json:"host_ip"`
+	FileName     string      `json:"file_name"`
+	Filepath     string      `json:"file_path"`
+	LastUpdate   CustomTime  `json:"last_update"`
+	OriginalMD5  string      `json:"original_md5"`
+	LatestMD5    string      `json:"latest_md5"`
+	ScanTime     CustomTime  `json:"scan_time"`
+	IsDeleted    bool        `json:"is_deleted"`
 }
 
 // 插入或更新文件记录
@@ -66,12 +85,12 @@ func InsertOrUpdateFileRecord(db *sql.DB, record FileRecord) error {
 	err := db.QueryRow("SELECT id FROM files WHERE file_path = ?", record.Filepath).Scan(&id)
 	if err == sql.ErrNoRows {
 		_, err = db.Exec(`INSERT INTO files(host_ip, file_name, file_path, last_update, original_md5, latest_md5, scan_time, is_deleted) VALUES(?, ?, ?, ?, ?, ?, ?, ?)`,
-			record.HostIP, record.FileName, record.Filepath, record.LastUpdate, record.OriginalMD5, record.LatestMD5, record.ScanTime, record.IsDeleted)
+			record.HostIP, record.FileName, record.Filepath, time.Time(record.LastUpdate), record.OriginalMD5, record.LatestMD5, time.Time(record.ScanTime), record.IsDeleted)
 	} else if err != nil {
 		return err
 	} else {
 		_, err = db.Exec(`UPDATE files SET last_update=?, latest_md5=?, scan_time=?, is_deleted=? WHERE file_path=?`,
-			record.LastUpdate, record.LatestMD5, record.ScanTime, record.IsDeleted, record.Filepath)
+			time.Time(record.LastUpdate), record.LatestMD5, time.Time(record.ScanTime), record.IsDeleted, record.Filepath)
 	}
 	if err != nil {
 		log.Printf("更新文件记录失败: %v", err)
@@ -90,19 +109,22 @@ func GetAllFiles(db *sql.DB) ([]FileRecord, error) {
 	var files []FileRecord
 	for rows.Next() {
 		var file FileRecord
+		var lastUpdateTime, scanTime time.Time
 		if err := rows.Scan(
 			&file.ID,
 			&file.HostIP,
 			&file.FileName,
 			&file.Filepath,
-			&file.LastUpdate,
+			&lastUpdateTime,
 			&file.OriginalMD5,
 			&file.LatestMD5,
-			&file.ScanTime,
+			&scanTime,
 			&file.IsDeleted,
 		); err != nil {
 			return nil, err
 		}
+		file.LastUpdate = CustomTime(lastUpdateTime)
+		file.ScanTime = CustomTime(scanTime)
 		files = append(files, file)
 	}
 	return files, nil
@@ -123,7 +145,7 @@ func CalculateMD5(filePath string) (string, error) {
 	defer file.Close()
 
 	hash := md5.New()
-	if _, err := io.Copy(hash, file); err != nil {
+	if _, err := io.Copy(hash, file); err != nil { // 使用io.Copy进行文件内容读取
 		return "", err
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
@@ -183,16 +205,16 @@ func CheckFilesPeriodically(db *sql.DB) {
 				continue
 			}
 
-			if !info.ModTime().Equal(file.LastUpdate) {
+			if !info.ModTime().Equal(time.Time(file.LastUpdate)) {
 				// 文件存在且最后更新时间不一致，重新计算MD5值
 				md5Sum, err := CalculateMD5(file.Filepath)
 				if err != nil {
 					log.Printf("计算 MD5 失败: %v", err)
 					continue
 				}
-				file.LastUpdate = info.ModTime()
+				file.LastUpdate = CustomTime(info.ModTime())
 				file.LatestMD5 = md5Sum
-				file.ScanTime = time.Now()
+				file.ScanTime = CustomTime(time.Now())
 				if err := InsertOrUpdateFileRecord(db, file); err != nil {
 					log.Printf("更新文件记录失败: %v", err)
 				}
@@ -246,10 +268,10 @@ func AddFileToWatch(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	}
 
 	file.FileName = fileName
-	file.LastUpdate = info.ModTime()
+	file.LastUpdate = CustomTime(info.ModTime())
 	file.OriginalMD5 = md5Sum
 	file.LatestMD5 = md5Sum
-	file.ScanTime = time.Now()
+	file.ScanTime = CustomTime(time.Now())
 	file.HostIP = hostIP
 	file.IsDeleted = false
 
