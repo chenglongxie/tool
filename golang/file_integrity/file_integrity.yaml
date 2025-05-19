@@ -1,0 +1,5 @@
+host_ip: "127.0.0.1"
+server:
+  port: 8080
+database:
+  path: "./file_integrity.db"
