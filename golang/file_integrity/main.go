@@ -17,7 +17,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"gopkg.in/yaml.v2"
-	_ "modernc.org/sqlite" // SQLite数据库驱动
+	_ "modernc.org/sqlite"
 )
 
 type Config struct {
@@ -123,7 +123,7 @@ func CalculateMD5(filePath string) (string, error) {
 	defer file.Close()
 
 	hash := md5.New()
-	if _, err := io.Copy(hash, file); err != nil { // 使用io.Copy进行文件内容读取
+	if _, err := io.Copy(hash, file); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
