@@ -259,7 +259,7 @@ func AddFileToWatch(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(file)
+	json.NewEncoder(w).Encode(map[string][]FileRecord{"data": {file}})
 }
 
 func DeleteFileRecordHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
@@ -279,6 +279,7 @@ func DeleteFileRecordHandler(w http.ResponseWriter, r *http.Request, db *sql.DB)
 	log.Printf("物理删除文件记录: ID=%d", id)
 
 	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "文件记录删除成功"})
 }
 
 func ListAllFiles(w http.ResponseWriter, r *http.Request, db *sql.DB) {
@@ -287,7 +288,7 @@ func ListAllFiles(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		http.Error(w, "获取文件列表失败", http.StatusInternalServerError)
 		return
 	}
-	json.NewEncoder(w).Encode(files)
+	json.NewEncoder(w).Encode(map[string][]FileRecord{"data": files})
 }
 
 func init() {
